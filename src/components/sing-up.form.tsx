@@ -5,13 +5,17 @@ import Link from "next/link";
 import * as z from "zod"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { signIn } from "@/lib/firebase";
+import { createUser, setDocument, updateUser } from "@/lib/firebase";
 import toast from "react-hot-toast";
+import { User } from "@/interfaces/user.interface";
 
-const SignInForm = () => {
+const SignUpForm = () => {
 
     //*Manejo formulario
     const formSchema = z.object({
+        uid: z.string(), //todo: no es requerido porque se obtiene luego de crear al usuario
+        name: z.string().min(4, { message: "The password must contain at least 4 characters" }),
+
         email: z.string()
             .email('El formato del email no es valido. Ejemplo: duvan@gmail.com')
             .min(1, { message: "Este campo es requerido." }),
@@ -24,6 +28,8 @@ const SignInForm = () => {
     const form = useForm<z.infer<typeof formSchema>>({ //todo: convinar useForm con Zod
         resolver: zodResolver(formSchema),
         defaultValues: {
+            uid: "",
+            name: "",
             email: "",
             password: ""
         }
@@ -35,19 +41,56 @@ const SignInForm = () => {
     //*Conectarse con usuario
     const onSubmitUser = async (user: z.infer<typeof formSchema>) => {
 
+        console.log(user)
+
         try {
-            const res = await signIn(user) //*todo: Nota -> creamos el usuario en firebase y lo comprobamos con el form
-            toast.success('Usuario autenticado  ')
+            const res = await createUser(user) //*se crea usuario
+            await updateUser({ displayName: user.name })
+            
+            user.uid = res.user.uid
+
+            await createUserInDB(user as User)
+            
+
         } catch (error: any) {
             toast.error(error.message, { duration: 2500 })
         }
 
     }
 
+    const createUserInDB = async (user: User) => {
+
+        const path = `user/${user.uid}`
+
+        try {
+
+            delete user.password
+            await setDocument(path, user)
+
+            toast.success(`Welcome ${user.name}`, {icon: '👋'})
+
+        } catch (error: any) {
+            toast.error(error.message)
+        }
+    }
+
     return (
         <div className="flex justify-center mt-4">
 
             <form className="flex flex-col gap-y-3" onSubmit={handleSubmit(onSubmitUser)}>
+
+                <section className="flex gap-x-3">
+                    <label htmlFor="name">Name</label>
+                    <input
+                        id="name"
+                        type="text"
+                        placeholder="Jhon Doe"
+                        autoComplete="name"
+                        className="border-2 border-slate-700 rounded-md pl-2"
+                        {...register("name")} />
+
+                    <p className="text-red-500">{errors.name?.message}</p>
+                </section>
 
                 <section className="flex gap-x-3">
                     <label htmlFor="email">Email</label>
@@ -73,22 +116,17 @@ const SignInForm = () => {
                     <p className="text-red-500">{errors.password?.message}</p>
                 </section>
 
-                <Link
-                    href="/forgot-password"
-                    className="underline text-blue-900 hover:text-purple-950"
-                >Forgot password?</Link>
-
                 <button
                     type="submit"
                     className="bg-blue-700 text-white font-bold py-2 rounded-md hover:bg-blue-900"
                 >Sign In</button>
 
                 <section className="flex gap-x-2">
-                    <p>You don't have an account?</p>
+                    <p>You have an account?</p>
                     <Link
-                        href="/sign-up"
+                        href="/"
                         className="underline text-blue-900 hover:text-purple-950"
-                    >Sign Up</Link>
+                    >Sign In</Link>
                 </section>
 
             </form>
@@ -97,4 +135,4 @@ const SignInForm = () => {
     );
 }
 
-export default SignInForm;
+export default SignUpForm;
